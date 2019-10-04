@@ -1,0 +1,7 @@
+#!/bin/bash
+
+SSL_DIR=$(erl -noinput -eval 'io:format("~s~n", [filename:dirname(code:which(inet_tls_dist))])' -s init stop)
+
+SSL_DIST_OPT="server_certfile /home/$USER/git/otp/ct_run.foo@ubuntu-vm.2019-09-06_15.19.18/tests.ssl_test.logs/run.2019-09-06_15.19.19/log_private/Certs/server/keycert.pem -ssl_dist_opt client_certfile /home/$USER/git/otp/ct_run.foo@ubuntu-vm.2019-09-06_15.19.18/tests.ssl_test.logs/run.2019-09-06_15.19.19/log_private/Certs/client/keycert.pem"
+
+erl -pa $SSL_DIR -proto_dist inet_tls -ssl_dist_opt $SSL_DIST_OPT "$@"

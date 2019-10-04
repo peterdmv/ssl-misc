@@ -1,0 +1,6 @@
+#!/bin/sh
+
+openssl s_client -debug -connect localhost:11029 \
+	-cert certs/server.pem \
+	-key certs/server.key \
+	-CAfile certs/ca.pem
