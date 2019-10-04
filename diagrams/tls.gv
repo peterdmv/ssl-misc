@@ -18,7 +18,7 @@ digraph TLS {
 		[label="[Recv HelloRetryRequest]",constraint=false,rankdir="LR",color=green];
 
 		tls13_client_wait_ee -> tls13_client_wait_finished
-		[label="[Recv EE]\nUsing PSK",color=red];
+		[label="[Recv EE]\nUsing PSK",color=green];
 		tls13_client_wait_ee -> tls13_client_wait_cert_cr
 		[label="[Recv EE]\nUsing Cert",color=green];
 		tls13_client_wait_cert_cr -> tls13_client_wait_cv
@@ -70,6 +70,8 @@ digraph TLS {
 
 		tls12_certify -> tls12_cipher;
 		tls12_cipher -> tls12_connection;
+
+		tls12_connection -> tls12_downgrade;
 
 		tls12_hello [label="hello",style=filled,color=black,fillcolor=green];
 		tls12_user_hello [label="user_hello"];
