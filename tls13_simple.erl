@@ -65,6 +65,47 @@ server() ->
     {ok, S} = ssl:handshake(CSock),
     S.
 
+
+server_psk() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {session_tickets, true}
+	    ,{log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    {ok, CSock} = ssl:transport_accept(LSock),
+    {ok, S} = ssl:handshake(CSock),
+    S.
+
+
+server_psk2() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {session_tickets, true}
+	    %% ,{log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    {ok, CSock} = ssl:transport_accept(LSock),
+    {ok, S} = ssl:handshake(CSock),
+
+    {ok, CSock2} = ssl:transport_accept(LSock),
+    {ok, S2} = ssl:handshake(CSock2),
+    {S, S2}.
+
+
+prepare_ets() ->
+    ets:new(tls13_session_ticket_db, [public, named_table, ordered_set]),
+    ets:new(tls13_server_state, [public, named_table, ordered_set]).
+
+
 server_nv() ->
     application:load(ssl),
     {ok, _} = application:ensure_all_started(ssl),
