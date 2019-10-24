@@ -67,14 +67,16 @@ server() ->
 
 
 server_psk() ->
+    prepare_ets(),
     application:load(ssl),
     {ok, _} = application:ensure_all_started(ssl),
     Port = ?PORT,
     LOpts = [{certfile, ?SERVER_CERT},
 	     {keyfile, ?SERVER_KEY},
+	     {reuseaddr, true},
 	     {versions, ['tlsv1.2','tlsv1.3']},
-	     {session_tickets, true}
-	    ,{log_level, debug}
+	     {session_tickets, enabled}
+	    %% ,{log_level, debug}
 	    ],
     {ok, LSock} = ssl:listen(Port, LOpts),
     {ok, CSock} = ssl:transport_accept(LSock),
@@ -83,22 +85,79 @@ server_psk() ->
 
 
 server_psk2() ->
+    prepare_ets(),
     application:load(ssl),
     {ok, _} = application:ensure_all_started(ssl),
     Port = ?PORT,
     LOpts = [{certfile, ?SERVER_CERT},
 	     {keyfile, ?SERVER_KEY},
 	     {versions, ['tlsv1.2','tlsv1.3']},
-	     {session_tickets, true}
+	     {session_tickets, enabled}
 	    %% ,{log_level, debug}
 	    ],
     {ok, LSock} = ssl:listen(Port, LOpts),
     {ok, CSock} = ssl:transport_accept(LSock),
-    {ok, S} = ssl:handshake(CSock),
+    {ok, _S} = ssl:handshake(CSock),
 
     {ok, CSock2} = ssl:transport_accept(LSock),
     {ok, S2} = ssl:handshake(CSock2),
-    {S, S2}.
+    S2.
+
+
+server_psk_loop() ->
+    prepare_ets(),
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {reuseaddr, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {session_tickets, stateless}
+	    ,{log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    accept_loop(LSock).
+
+
+server_psk_bloom_loop() ->
+    prepare_ets(),
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {reuseaddr, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {session_tickets, stateless},
+	     {server_bloom_filter, {server, 2, 14}}
+	    ,{log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    accept_loop(LSock).
+
+
+server_psk_hrr_loop() ->
+    prepare_ets(),
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {reuseaddr, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {supported_groups, [x448, x25519]},
+	     {session_tickets, enabled}
+	    ,{log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    accept_loop(LSock).
+
+
+accept_loop(Sock) ->
+    {ok, CSock} = ssl:transport_accept(Sock),
+    {ok, _} = ssl:handshake(CSock),
+    accept_loop(Sock).
 
 
 prepare_ets() ->
@@ -201,7 +260,22 @@ client_session_tickets() ->
 	     {versions, ['tlsv1.2', 'tlsv1.3']},
 	     {log_level, debug},
 	     %% {server_name_indication, "localhost"},
-	     {session_tickets, true}
+	     {session_tickets, enabled}
+	    %% ,{use_ticket, <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    Sock.
+
+client_session_tickets_auto() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    COpts = [{verify, verify_peer},
+	     {cacertfile, ?CA_CERT},
+	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     {log_level, debug},
+	     %% {server_name_indication, "localhost"},
+	     {session_tickets, auto}
 	    %% ,{use_ticket, <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>}
 	    ],
     {ok, Sock} = ssl:connect("localhost", Port, COpts),
@@ -216,7 +290,7 @@ client_session_tickets2() ->
 	     {versions, ['tlsv1.2', 'tlsv1.3']},
 	     {log_level, debug},
 	     %% {server_name_indication, "localhost"},
-	     {session_tickets, true}
+	     {session_tickets, enabled}
 	    %% ,{use_ticket, <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>}
 	    ,{use_ticket, <<187,86,251,97,101,197,211,219,234,200,96,43,51,119,194,159,237,150,135,89,64,50,78,251,26,157,224,21,17,106,240,32>>}
 	    ],
@@ -233,11 +307,63 @@ client_session_tickets3() ->
 	     {versions, ['tlsv1.2', 'tlsv1.3']},
 	     {log_level, debug},
 	     %% {server_name_indication, "localhost"},
-	     {session_tickets, true}
+	     {session_tickets, enabled}
+	    ,{use_ticket, [TicketId]}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    Sock.
+
+client_session_tickets4() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    TicketId0 = ets:last(tls13_session_ticket_db),
+    TicketId1 = ets:first(tls13_session_ticket_db),
+    COpts = [{verify, verify_peer},
+	     {cacertfile, ?CA_CERT},
+	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     {log_level, debug},
+	     %% {server_name_indication, "localhost"},
+	     {session_tickets, enabled}
+	    ,{use_ticket, [TicketId0,TicketId1]}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    Sock.
+
+client_session_tickets_first() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    TicketId1 = ets:first(tls13_session_ticket_db),
+    COpts = [{verify, verify_peer},
+	     {cacertfile, ?CA_CERT},
+	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     {log_level, debug},
+	     %% {server_name_indication, "localhost"},
+	     {session_tickets, enabled}
+	    ,{use_ticket, [TicketId1]}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    Sock.
+
+
+client_session_tickets3hrr_openssl() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    TicketId = ets:last(tls13_session_ticket_db),
+    COpts = [{verify, verify_peer},
+	     {cacertfile, ?CA_CERT},
+	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     {log_level, debug},
+	     {supported_groups,[secp256r1, x25519]},
+	     %% {server_name_indication, "localhost"},
+	     {session_tickets, enabled}
 	    ,{use_ticket, TicketId}
 	    ],
     {ok, Sock} = ssl:connect("localhost", Port, COpts),
     Sock.
+
 
 client_session_tickets3hrr() ->
     application:load(ssl),
@@ -250,11 +376,13 @@ client_session_tickets3hrr() ->
 	     {log_level, debug},
 	     {supported_groups,[secp256r1, x25519]},
 	     %% {server_name_indication, "localhost"},
-	     {session_tickets, true}
+	     {session_tickets, enabled}
 	    ,{use_ticket, TicketId}
 	    ],
     {ok, Sock} = ssl:connect("localhost", Port, COpts),
     Sock.
+
+
 
 client_nv() ->
     application:load(ssl),
