@@ -63,6 +63,26 @@ contains(Name, Elem) ->
     end.
 
 
+
+visualize(Name) ->
+    case ets:whereis(?DEFAULT_TABLE) of
+	undefined ->
+	    not_initialized;
+	_ ->
+	    case ets:lookup(?DEFAULT_TABLE, Name) of
+		[] ->
+		    bloom_filter_not_exists;
+		[{_, _, _, _, _, BitField}] ->
+		    visualize(BitField, [])
+	    end
+    end.
+%%
+visualize(<<>>, Acc) ->
+    lists:reverse(Acc);
+visualize(<<Bit:1,T/bitstring>>, Acc) ->
+    visualize(T, [Bit|Acc]).
+
+
 %%--------------------------------------------------------------------
 %% Internal functions ------------------------------------------------
 %%--------------------------------------------------------------------
