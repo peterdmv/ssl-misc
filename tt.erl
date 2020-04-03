@@ -4,7 +4,9 @@
 	 client2/0, server2/0,
 	 client3/0, server_verify_strict/0,
 	 server_verify_strict2/0,
-	 server_verify_strict_hrr/0, client_hrr/0,
+	 server_verify_strict_hrr/0,
+	 server_verify_strict_hrr_no_ccs/0,
+	 client_hrr/0,
 	 server_sni/0, client_sni/0,
 	 server_alpn/0, client_alpn/0]).
 
@@ -58,15 +60,34 @@ server() ->
     LOpts = [{certfile, ?SERVER_CERT},
 	     {keyfile, ?SERVER_KEY},
 	     {reuseaddr, true},
-	     {versions, ['tlsv1','tlsv1.2']},
-	     {session_tickets, enabled}
-	    ,{log_level, debug}
+	     {versions, ['tlsv1','tlsv1.2','tlsv1.3']},
+	     %% {anti_replay, '10k'},
+	     %% {session_tickets, stateful},
+	     %% {beast_mitigation, one_n_minus_one},
+	     {log_level, debug}
 	    ],
     {ok, LSock} = ssl:listen(Port, LOpts),
     {ok, CSock} = ssl:transport_accept(LSock),
     {ok, S} = ssl:handshake(CSock),
     S.
 
+server_key_limit() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {reuseaddr, true},
+	     {key_update_at, 1},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     %% {anti_replay, '10k'},
+	     %% {session_tickets, stateful},
+	     {log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    {ok, CSock} = ssl:transport_accept(LSock),
+    {ok, S} = ssl:handshake(CSock),
+    S.
 
 server_cipher() ->
     application:load(ssl),
@@ -291,10 +312,11 @@ client() ->
     Port = ?PORT,
     COpts = [{verify, verify_peer},
 	     {cacertfile, ?CA_CERT},
-	     {versions, ['tlsv1', 'tlsv1.2']},
+	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     %% {session_tickets, stateless},
 	     {log_level, debug}
 	    ],
-    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    {ok, Sock} = ssl:connect("localhost", Port, COpts, 10000),
     Sock.
 
 client_only_13() ->
@@ -881,7 +903,7 @@ server_verify_strict() ->
              {verify, verify_peer},
              {fail_if_no_peer_cert, true},
 	     {versions, ['tlsv1.2','tlsv1.3']},
-	     {supported_groups, [x448, secp256r1, secp384r1]},
+	     %%{supported_groups, [x448, secp256r1, secp384r1]},
 	     {log_level, debug}
 	    ],
     {ok, LSock} = ssl:listen(Port, LOpts),
@@ -946,6 +968,43 @@ server_verify_strict_hrr() ->
     {ok, S} = ssl:handshake(CSock),
     S.
 
+server_verify_strict_hrr_no_ccs() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {cacertfile, ?CA_CERT},
+	     {reuseaddr, true},
+             {verify, verify_peer},
+             {fail_if_no_peer_cert, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {supported_groups, [x448, x25519]},
+	     {middlebox_comp_mode, false},
+	     {log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    {ok, CSock} = ssl:transport_accept(LSock),
+    {ok, S} = ssl:handshake(CSock),
+    S.
+
+server_hrr() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {cacertfile, ?CA_CERT},
+	     {reuseaddr, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {supported_groups, [x448, x25519]},
+	     {log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    {ok, CSock} = ssl:transport_accept(LSock),
+    {ok, S} = ssl:handshake(CSock),
+    S.
+
 client_hrr() ->
     application:load(ssl),
     {ok, _} = application:ensure_all_started(ssl),
@@ -962,6 +1021,22 @@ client_hrr() ->
     {ok, Sock} = ssl:connect("localhost", Port, COpts),
     Sock.
 
+client_hrr_no_ccs() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    COpts = [{verify, verify_peer},
+	     {cacertfile, ?CA_CERT},
+	     {certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     {middlebox_comp_mode, false},
+	     {supported_groups,[secp256r1, x25519]}
+,
+	     {log_level, debug}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    Sock.
 
 server_sni() ->
     application:load(ssl),
@@ -1117,3 +1192,31 @@ client_all_ver2() ->
     {ok, Sock} = ssl:connect("localhost", Port, COpts),
     Sock.
 
+-define(DO_MAYBE, {Ref,Maybe} = maybe(), try).
+-define(DONE,
+	catch
+	    {Ref, #alert{} = Alert} ->
+		Alert;
+	    {Ref, {#alert{} = Alert, State}} ->
+		{Alert, State};
+	    {Ref, {State, StateName}} ->
+		{State, StateName};
+	    {Ref, {State, StateName, ServerHello}} ->
+		{State, StateName, ServerHello}
+	end).
+-record(alert, {}).
+
+maybe() ->
+    Ref = erlang:make_ref(),
+    Ok = fun(ok) -> ok;
+            ({ok,R}) -> R;
+            ({error,Reason}) ->
+                 throw({Ref,Reason})
+         end,
+    {Ref,Ok}.
+
+
+test() ->
+    ?DO_MAYBE
+	Maybe(ok)
+    ?DONE.

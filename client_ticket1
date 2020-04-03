@@ -1,0 +1,7 @@
+#!/bin/sh
+
+openssl s_client -debug -connect localhost:11029 \
+	-CAfile certs/ca.pem \
+	-tls1_3 \
+	-sess_out session_ticket \
+	-groups P-256:X25519
