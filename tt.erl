@@ -54,16 +54,35 @@
 %%     Sock.
 
 server() ->
+    %% FunAndState =  {fun(_,{bad_cert, unknown_ca}, UserState) ->
+    %% 			    {valid, UserState};
+    %% 		       (_,{bad_cert, _} = Reason, _) ->
+    %% 			    {fail, Reason};
+    %% 		       (_,{extension, _}, UserState) ->
+    %% 			    {unknown, UserState};
+    %% 		       (_, valid, UserState) ->
+    %% 			    {valid, UserState};
+    %% 		       (_, valid_peer, UserState) ->
+    %% 			    {valid, UserState}
+    %% 		    end, []},
+    FunAndState = fun tt:verify_fail_always/3,
     application:load(ssl),
     {ok, _} = application:ensure_all_started(ssl),
     Port = ?PORT,
     LOpts = [{certfile, ?SERVER_CERT},
 	     {keyfile, ?SERVER_KEY},
+	     {cacertfile, ?CA_CERT},
 	     {reuseaddr, true},
-	     {versions, ['tlsv1','tlsv1.2','tlsv1.3']},
+	     {versions, ['tlsv1.3']},
+	     {verify, verify_peer},
 	     %% {anti_replay, '10k'},
 	     %% {session_tickets, stateful},
-	     %% {beast_mitigation, one_n_minus_one},
+	     %% {reuse_session, fun(_,_,_,_) -> false end},
+	     %% {reuse_sessions, true},
+	     %%{padding_check, false},
+	     %% {secure_renegotiate, false},
+	     %% {anti_replay, teast},
+	     {verify_fun, FunAndState},
 	     {log_level, debug}
 	    ],
     {ok, LSock} = ssl:listen(Port, LOpts),
@@ -306,18 +325,69 @@ server_honor_cipher_order() ->
     {ok, S} = ssl:handshake(CSock),
     S.
 
+verify_fail_always(_Certificate, _Event, _State) ->
+    %% Create an ETS table, to record the fact that the verify function ran.
+    %% Spawn a new process, to avoid the ETS table disappearing.
+    Parent = self(),
+    spawn(
+      fun() ->
+	      ets:new(verify_fun_ran, [public, named_table]),
+	      ets:insert(verify_fun_ran, {verify_fail_always_ran, true}),
+	      Parent ! go_ahead,
+	      timer:sleep(infinity)
+      end),
+    receive go_ahead -> ok end,
+    {fail, bad_certificate}.
+
 client() ->
+    %% FunAndState =  {fun(_,{bad_cert, unknown_ca}, UserState) ->
+    %% 			    {valid, UserState};
+    %% 		       (_,{bad_cert, _} = Reason, _) ->
+    %% 			    {fail, Reason};
+    %% 		       (_,{extension, _}, UserState) ->
+    %% 			    {unknown, UserState};
+    %% 		       (_, valid, UserState) ->
+    %% 			    {valid, UserState};
+    %% 		       (_, valid_peer, UserState) ->
+    %% 			    {valid, UserState}
+    %% 		    end, []},
+    FunAndState = fun tt:verify_fail_always/3,
+
     application:load(ssl),
     {ok, _} = application:ensure_all_started(ssl),
     Port = ?PORT,
     COpts = [{verify, verify_peer},
 	     {cacertfile, ?CA_CERT},
-	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     {versions, ['tlsv1.3']},
 	     %% {session_tickets, stateless},
+	     %%{client_preferred_next_protocols, {client, [<<"http/1.1">>]}},
+	     %% {reuse_session, <<1,2,3,4>>},
+	     %% {reuse_sessions, true},
+	     %% {srp_identity, {"user", "password"}},
+	     {verify_fun, FunAndState},
 	     {log_level, debug}
 	    ],
     {ok, Sock} = ssl:connect("localhost", Port, COpts, 10000),
     Sock.
+
+client_no_ca() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    COpts = [{verify, 4},
+	     {cacertfile, ?CA_CERT},
+	     %% {versions, ['tlsv1.2']},
+	     %% {session_tickets, stateless},
+	     %%{client_preferred_next_protocols, {client, [<<"http/1.1">>]}},
+	     %% {reuse_session, <<1,2,3,4>>},
+	     %% {reuse_sessions, true},
+	     %% {srp_identity, {"user", "password"}},
+	     
+	     {log_level, debug}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts, 10000),
+    Sock.
+
 
 client_only_13() ->
     application:load(ssl),
