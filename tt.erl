@@ -23,35 +23,150 @@
 %% -define(SERVER_CERT_LONG, "certs-long/server.pem").
 %% -define(SERVER_KEY_LONG, "certs-long/server.key").
 
-%% server_12() ->
-%%     application:load(ssl),
-%%     {ok, _} = application:ensure_all_started(ssl),
-%%     Port = ?PORT,
-%%     LOpts = [{certfile, ?SERVER_CERT_LONG},
-%% 	     {keyfile, ?SERVER_KEY_LONG},
-%% 	     {depth, 5},
-%% 	     {versions, ['tlsv1.2']}
-%% %% ,
-%% %% 	     {log_level, debug}
-%% 	    ],
-%%     {ok, LSock} = ssl:listen(Port, LOpts),
-%%     {ok, CSock} = ssl:transport_accept(LSock),
-%%     {ok, S} = ssl:handshake(CSock),
-%%     S.
+-define(TSERVER_CA_CERT, "bad-certs/rsa_server_cacerts.pem").
+-define(TCLIENT_CA_CERT, "bad-certs/rsa_client_cacerts.pem").
+-define(TSERVER_CERT, "bad-certs/rsa_server_cert.pem").
+-define(TSERVER_KEY, "bad-certs/rsa_server_key.pem").
+-define(TCLIENT_CERT, "bad-certs/rsa_client_cert.pem").
+-define(TCLIENT_KEY, "bad-certs/rsa_client_key.pem").
 
-%% client_12() ->
-%%     application:load(ssl),
-%%     {ok, _} = application:ensure_all_started(ssl),
-%%     Port = ?PORT,
-%%     COpts = [{verify, verify_peer},
-%% 	     {cacertfile, ?CA_CERT_LONG},
-%% 	     {depth, 5},
-%% 	     {versions, ['tlsv1.2']}
-%% ,
-%% 	     {log_level, debug}
-%% 	    ],
-%%     {ok, Sock} = ssl:connect("localhost", Port, COpts),
-%%     Sock.
+tserver() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?TSERVER_CERT},
+	     {keyfile, ?TSERVER_KEY},
+	     {cacertfile, ?TSERVER_CA_CERT},
+	     {reuseaddr, true},
+	     %% {depth, 5},
+	     %% {ciphers, ["DHE-RSA-AES256-SHA","DHE-RSA-AES128-SHA"]},
+	     %% {versions, ['tlsv1.2']},
+	     %% {signature_algs, [ecdsa_secp521r1_sha512,
+	     %% 		       ecdsa_secp384r1_sha384,
+	     %% 		       ecdsa_secp256r1_sha256,
+	     %% 		       rsa_pss_pss_sha384,
+	     %% 		       rsa_pss_pss_sha256,
+	     %% 		       rsa_pss_rsae_sha384,
+	     %% 		       rsa_pss_rsae_sha256,
+	     %% 		       rsa_pkcs1_sha512,
+	     %% 		       rsa_pkcs1_sha384,
+	     %% 		       rsa_pkcs1_sha256,
+	     %% 		       ecdsa_sha1,
+	     %% 		       rsa_pkcs1_sha1,
+	     %% 		       {sha512,ecdsa},
+	     %% 		       {sha512,rsa},
+	     %% 		       {sha384,ecdsa},
+	     %% 		       {sha384,rsa},
+	     %% 		       {sha256,ecdsa},
+	     %% 		       {sha256,rsa},
+	     %% 		       {sha224,ecdsa},
+	     %% 		       {sha224,rsa},
+	     %% 		       {sha,ecdsa},
+	     %% 		       {sha,rsa},
+	     %% 		       {sha,dsa}]},
+ 	     {log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    {ok, CSock} = ssl:transport_accept(LSock),
+    {ok, S} = ssl:handshake(CSock),
+    S.
+
+tclient() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    COpts = [{certfile, ?TCLIENT_CERT},
+	     {keyfile, ?TCLIENT_KEY},
+	     {verify, verify_none},
+	     {cacertfile, ?TCLIENT_CA_CERT},
+	     {ciphers,[#{cipher => aes_256_gcm,key_exchange => dhe_dss,
+			 mac => aead,prf => sha384},
+		       #{cipher => aes_128_gcm,key_exchange => dhe_dss,
+			 mac => aead,prf => sha256}]},
+	     %% {client_preferred_next_protocols,
+	     %%  {client,[<<"spdy/2">>],<<"http/1.1">>}},
+	     %% {depth, 5},
+	     %% {ciphers, ["DHE-RSA-AES256-SHA","DHE-RSA-AES128-SHA"]},
+	     %% {versions, ['tlsv1.2']},
+	     {log_level, debug}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    Sock.
+
+demo_client() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    COpts = [{verify, verify_peer},
+	     {cacertfile, ?CA_CERT},
+	     {certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     {middlebox_comp_mode, true},
+	     {log_level, debug}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    Sock.
+
+
+demo_client_hrr() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    COpts = [{verify, verify_peer},
+	     {cacertfile, ?CA_CERT},
+	     {certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     {supported_groups,[secp256r1, x25519]},
+	     {middlebox_comp_mode, true},
+	     {log_level, debug}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    Sock.
+
+
+demo_server() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {cacertfile, ?CA_CERT},
+	     {reuseaddr, true},
+             {verify, verify_peer},
+             {fail_if_no_peer_cert, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {middlebox_comp_mode, true},
+	     {log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    {ok, CSock} = ssl:transport_accept(LSock),
+    {ok, S} = ssl:handshake(CSock),
+    S.
+
+demo_server_hrr() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {cacertfile, ?CA_CERT},
+	     {cookie, true},
+	     {reuseaddr, true},
+             {verify, verify_peer},
+             {fail_if_no_peer_cert, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {supported_groups, [x448, x25519]},
+	     {middlebox_comp_mode, true},
+	     {log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    {ok, CSock} = ssl:transport_accept(LSock),
+    {ok, S} = ssl:handshake(CSock),
+    S.
+
+
 
 server() ->
     %% FunAndState =  {fun(_,{bad_cert, unknown_ca}, UserState) ->
@@ -82,7 +197,7 @@ server() ->
 	     %%{padding_check, false},
 	     %% {secure_renegotiate, false},
 	     %% {anti_replay, teast},
-	     {verify_fun, FunAndState},
+	     %%{verify_fun, FunAndState},
 	     {log_level, debug}
 	    ],
     {ok, LSock} = ssl:listen(Port, LOpts),
@@ -148,7 +263,7 @@ server_psk() ->
 	     {keyfile, ?SERVER_KEY},
 	     {reuseaddr, true},
 	     {versions, ['tlsv1.2','tlsv1.3']},
-	     {session_tickets, stateless}
+	     {session_tickets, stateful}
 	    %% ,{log_level, debug}
 	    ],
     {ok, LSock} = ssl:listen(Port, LOpts),
@@ -165,15 +280,36 @@ server_psk2() ->
 	     {keyfile, ?SERVER_KEY},
 	     {reuseaddr, true},
 	     {versions, ['tlsv1.2','tlsv1.3']},
-	     {session_tickets, enabled}
+	     {session_tickets, stateful}
 	    %% ,{log_level, debug}
 	    ],
+    LOpts2 = [%%{certfile, ?SERVER_CERT},
+	      %%{keyfile, ?SERVER_KEY},
+	      %%{reuseaddr, true},
+	      %%{versions, ['tlsv1.2','tlsv1.3']},
+	      {session_tickets, stateless}
+	    %% ,{log_level, debug}
+	    ],
+
+    %% {ok, LSock} = ssl:listen(Port, LOpts),
+    %% {ok, CSock} = ssl:transport_accept(LSock),
+    %% {ok, _S} = ssl:handshake(CSock),
+
+    %% {ok, CSock2} = ssl:transport_accept(LSock),
+    %% {ok, S2} = ssl:handshake(CSock2),
+
     {ok, LSock} = ssl:listen(Port, LOpts),
     {ok, CSock} = ssl:transport_accept(LSock),
     {ok, _S} = ssl:handshake(CSock),
 
-    {ok, CSock2} = ssl:transport_accept(LSock),
+    ssl:close(LSock),
+    timer:sleep(1000),
+    {ok, LSock2} = ssl:listen(11030, LOpts2),
+
+    {ok, CSock2} = ssl:transport_accept(LSock2),
     {ok, S2} = ssl:handshake(CSock2),
+
+
     S2.
 
 
@@ -325,18 +461,32 @@ server_honor_cipher_order() ->
     {ok, S} = ssl:handshake(CSock),
     S.
 
+verify_pass_always(_Certificate, _Event, State) ->
+    %% Create an ETS table, to record the fact that the verify function ran.
+    %% Spawn a new process, to avoid the ETS table disappearing.
+    %% Parent = self(),
+    %% spawn(
+    %%   fun() ->
+    %% 	      ets:new(verify_fun_ran, [public, named_table]),
+    %% 	      ets:insert(verify_fun_ran, {verify_pass_always_ran, true}),
+    %% 	      Parent ! go_ahead,
+    %% 	      timer:sleep(infinity)
+    %%   end),
+    %% receive go_ahead -> ok end,
+    {valid, State}.
+
 verify_fail_always(_Certificate, _Event, _State) ->
     %% Create an ETS table, to record the fact that the verify function ran.
     %% Spawn a new process, to avoid the ETS table disappearing.
-    Parent = self(),
-    spawn(
-      fun() ->
-	      ets:new(verify_fun_ran, [public, named_table]),
-	      ets:insert(verify_fun_ran, {verify_fail_always_ran, true}),
-	      Parent ! go_ahead,
-	      timer:sleep(infinity)
-      end),
-    receive go_ahead -> ok end,
+    %% Parent = self(),
+    %% spawn(
+    %%   fun() ->
+    %% 	      ets:new(verify_fun_ran, [public, named_table]),
+    %% 	      ets:insert(verify_fun_ran, {verify_fail_always_ran, true}),
+    %% 	      Parent ! go_ahead,
+    %% 	      timer:sleep(infinity)
+    %%   end),
+    %% receive go_ahead -> ok end,
     {fail, bad_certificate}.
 
 client() ->
@@ -351,20 +501,22 @@ client() ->
     %% 		       (_, valid_peer, UserState) ->
     %% 			    {valid, UserState}
     %% 		    end, []},
-    FunAndState = fun tt:verify_fail_always/3,
+    FunAndState = {fun tt:verify_fail_always/3, {}},
 
     application:load(ssl),
     {ok, _} = application:ensure_all_started(ssl),
     Port = ?PORT,
     COpts = [{verify, verify_peer},
 	     {cacertfile, ?CA_CERT},
+	     {certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
 	     {versions, ['tlsv1.3']},
 	     %% {session_tickets, stateless},
 	     %%{client_preferred_next_protocols, {client, [<<"http/1.1">>]}},
 	     %% {reuse_session, <<1,2,3,4>>},
 	     %% {reuse_sessions, true},
 	     %% {srp_identity, {"user", "password"}},
-	     {verify_fun, FunAndState},
+	     %%{verify_fun, FunAndState},
 	     {log_level, debug}
 	    ],
     {ok, Sock} = ssl:connect("localhost", Port, COpts, 10000),
@@ -382,7 +534,7 @@ client_no_ca() ->
 	     %% {reuse_session, <<1,2,3,4>>},
 	     %% {reuse_sessions, true},
 	     %% {srp_identity, {"user", "password"}},
-	     
+
 	     {log_level, debug}
 	    ],
     {ok, Sock} = ssl:connect("localhost", Port, COpts, 10000),
@@ -431,6 +583,21 @@ client_session_tickets_auto() ->
     {ok, Sock} = ssl:connect("localhost", Port, COpts),
     Sock.
 
+client_session_tickets_auto(Port) ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    %%Port = ?PORT,
+    COpts = [{verify, verify_peer},
+	     {cacertfile, ?CA_CERT},
+	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     {log_level, debug},
+	     %% {server_name_indication, "localhost"},
+	     {session_tickets, auto}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    Sock.
+
+
 client_session_tickets2() ->
     application:load(ssl),
     {ok, _} = application:ensure_all_started(ssl),
@@ -441,6 +608,39 @@ client_session_tickets2() ->
 	     {log_level, debug},
 	     %% {server_name_indication, "localhost"},
 	     {session_tickets, enabled}
+	    %% ,{use_ticket, <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>}
+	    ,{use_ticket, [<<131,116,0,0,0,5,100,0,4,104,107,100,102,100,0,6,115,104,97,
+                  51,56,52,100,0,3,112,115,107,109,0,0,0,48,199,36,206,173,
+                  156,139,254,111,11,232,124,158,36,103,42,246,64,255,82,143,
+                  189,222,48,227,186,228,23,210,196,50,156,74,18,112,52,34,
+                  224,159,218,76,231,5,217,99,81,241,9,92,100,0,3,115,110,
+                  105,107,0,9,108,111,99,97,108,104,111,115,116,100,0,6,116,
+                  105,99,107,101,116,104,6,100,0,18,110,101,119,95,115,101,
+                  115,115,105,111,110,95,116,105,99,107,101,116,98,0,0,28,32,
+                  110,4,0,51,234,250,190,109,0,0,0,8,0,0,0,0,0,0,0,2,109,0,0,
+                  0,113,248,232,241,165,29,37,94,116,100,84,140,250,73,165,
+                  61,76,4,250,164,131,16,212,187,194,141,125,59,82,194,151,
+                  42,218,85,221,165,112,28,114,169,30,133,121,107,83,168,223,
+                  231,81,160,82,29,6,153,245,216,9,25,53,157,164,73,249,101,
+                  206,166,131,123,54,82,233,160,238,247,210,48,87,110,101,63,
+                  20,54,77,144,187,49,49,116,211,71,179,80,225,91,244,33,181,
+                  165,98,44,32,109,158,118,221,33,106,139,3,165,220,189,209,
+                  174,116,0,0,0,0,100,0,9,116,105,109,101,115,116,97,109,112,
+                  98,93,201,82,190>>]}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    Sock.
+
+client_session_tickets2(Port) ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    %%Port = ?PORT,
+    COpts = [{verify, verify_peer},
+	     {cacertfile, ?CA_CERT},
+	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     {log_level, debug},
+	     %% {server_name_indication, "localhost"},
+	     {session_tickets, manual}
 	    %% ,{use_ticket, <<0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0>>}
 	    ,{use_ticket, [<<131,116,0,0,0,5,100,0,4,104,107,100,102,100,0,6,115,104,97,
                   51,56,52,100,0,3,112,115,107,109,0,0,0,48,199,36,206,173,
@@ -660,7 +860,6 @@ client_reuse_sessions() ->
 	    ],
     {ok, Sock} = ssl:connect("localhost", Port, COpts),
     Sock.
-
 client_hs_paused() ->
     application:load(ssl),
     {ok, _} = application:ensure_all_started(ssl),
