@@ -3,5 +3,6 @@
 openssl s_client -debug -connect localhost:11029 \
 	-CAfile certs/ca.pem \
 	-tls1_3 \
-	-sess_out session_ticket #\
-	#-groups P-256:X25519
+	-sess_in session_ticket -sess_out session_ticket2 \
+        -early_data request.txt #\
+	#-trace

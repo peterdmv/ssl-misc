@@ -1,0 +1,13 @@
+#/bin/bash
+
+openssl s_server -accept 11029 \
+	-tls1_3 -verify 2 \
+	-cert certs/server.pem \
+	-CAfile certs/ca.pem \
+	-key certs/server.key \
+	-keylogfile keylog \
+	-msg -debug \
+	-early_data \
+	#-max_early_data 16384 \
+        -no_anti_replay \
+        -trace

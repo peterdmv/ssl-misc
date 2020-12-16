@@ -1,0 +1,8 @@
+#/bin/bash
+
+openssl s_server -accept 11029 \
+	-tls1_3 -verify 2 \
+	-cert certs/server.pem \
+	-CAfile certs/ca.pem \
+	-key certs/server.key \
+	-msg -debug
