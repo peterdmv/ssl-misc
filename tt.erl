@@ -397,7 +397,7 @@ server_early_data_loop() ->
 	     {reuseaddr, true},
 	     {versions, ['tlsv1.2','tlsv1.3']},
 	     {session_tickets, stateless},
-	     {early_data, disabled}
+	     {early_data, enabled}
 	    ,{log_level, debug}
 	    ],
     {ok, LSock} = ssl:listen(Port, LOpts),
@@ -407,6 +407,80 @@ accept_loop(Sock) ->
     {ok, CSock} = ssl:transport_accept(Sock),
     {ok, _} = ssl:handshake(CSock),
     accept_loop(Sock).
+
+server_early_data_loop2() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {reuseaddr, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {session_tickets, stateless},
+	     {early_data, enabled}
+	   %% ,{log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    accept_loop2(LSock).
+
+server_early_data_loop3() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {cacertfile, ?CA_CERT},
+	     {reuseaddr, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {verify,verify_peer},
+	     {fail_if_no_peer_cert,true},
+	     {session_tickets, stateless},
+	     {early_data, enabled}
+	   %% ,{log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    accept_loop2(LSock).
+
+server_early_data_loop_10k() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    application:set_env(ssl, server_session_ticket_max_early_data, 10000),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {reuseaddr, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {session_tickets, stateless},
+	     {early_data, disabled}
+	   %% ,{log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    accept_loop2(LSock).
+
+server_early_data_loop_10k_enabled() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    application:set_env(ssl, server_session_ticket_max_early_data, 10000),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {reuseaddr, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {session_tickets, stateless},
+	     {early_data, enabled}
+	   %% ,{log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    accept_loop2(LSock).
+
+accept_loop2(Sock) ->
+    {ok, CSock} = ssl:transport_accept(Sock),
+    {ok, _} = ssl:handshake(CSock),
+    {ok, CSock2} = ssl:transport_accept(Sock),
+    {ok, S} = ssl:handshake(CSock2),
+    S.
+
+
 
 
 server_nv() ->
@@ -681,9 +755,46 @@ client_session_tickets_manual_early_data(Tickets, Data) ->
     {ok, Sock} = ssl:connect("localhost", Port, COpts),
     Sock.
 
+client_session_tickets_manual_early_data_auth(Tickets, Data) ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    COpts = [%%{verify, verify_peer},
+	     {cacertfile, ?CA_CERT},
+	     {certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     {log_level, debug},
+	     %% {server_name_indication, "localhost"},
+	     {session_tickets, manual},
+	     {use_ticket, Tickets},
+	     {early_data, Data}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    Sock.
+
 client_session_tickets_manual_early_data_size(Size) ->
     Data = binary:copy(<<"f">>, Size),
     {Sock, [Ticket|_]} = client_session_tickets_manual(),
+    ssl:close(Sock),
+    client_session_tickets_manual_early_data([Ticket], Data).
+
+client_session_tickets_manual_early_data_size_bad(Size) ->
+    Data = binary:copy(<<"f">>, Size),
+    {Sock, Tickets0} = client_session_tickets_manual(),
+    ssl:close(Sock),
+    Tickets = update_session_ticket_extension(Tickets0, 17000),
+    client_session_tickets_manual_early_data(Tickets, Data).
+
+client_session_tickets_manual_early_data_size_auth(Size) ->
+    Data = binary:copy(<<"f">>, Size),
+    {Sock, [Ticket|_]} = client_session_tickets_manual_auth(),
+    ssl:close(Sock),
+    client_session_tickets_manual_early_data_auth([Ticket], Data).
+
+client_session_tickets_manual_early_data_size_auth_bad(Size) ->
+    Data = binary:copy(<<"f">>, Size),
+    {Sock, [Ticket|_]} = client_session_tickets_manual_auth(),
     ssl:close(Sock),
     client_session_tickets_manual_early_data([Ticket], Data).
 
@@ -842,6 +953,24 @@ client_session_tickets_manual() ->
     Port = ?PORT,
     COpts = [{verify, verify_peer},
 	     {cacertfile, ?CA_CERT},
+	     {versions, ['tlsv1.2', 'tlsv1.3']},
+	     {log_level, debug},
+	     %% {server_name_indication, "localhost"},
+	     {session_tickets, manual}
+	    %% ,{use_ticket, [TicketId1]}
+	    ],
+    {ok, Sock} = ssl:connect("localhost", Port, COpts),
+    %% Sock.
+    {Sock, receive_tickets(2)}.
+
+client_session_tickets_manual_auth() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    Port = ?PORT,
+    COpts = [{verify, verify_peer},
+	     {cacertfile, ?CA_CERT},
+	     {certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
 	     {versions, ['tlsv1.2', 'tlsv1.3']},
 	     {log_level, debug},
 	     %% {server_name_indication, "localhost"},
@@ -1793,4 +1922,30 @@ early_data_manual() ->
     {ok, Sock} = ssl:connect("localhost", Port, COpts1),
     Sock.
 
+%% RFC 8446 B.3.4. Ticket Establishment
+-record(new_session_ticket, {
+          ticket_lifetime,  %unit32
+          ticket_age_add,   %unit32
+          ticket_nonce,     %opaque ticket_nonce<0..255>;
+          ticket,           %opaque ticket<1..2^16-1>
+          extensions        %extensions<0..2^16-2>
+         }).
+
+%% #empty{} (client_hello, encrypted_extensions)
+-record(early_data_indication, {}).
+-record(early_data_indication_nst, {
+          indication % uint32 max_early_data_size (new_session_ticket)
+         }).
+
+update_session_ticket_extension([Ticket|_], MaxEarlyDataSize) ->
+    #{ticket := #new_session_ticket{
+                   extensions = #{early_data :=
+                                      #early_data_indication_nst{
+                                         indication = Size}}}} = Ticket,
+    #{ticket := #new_session_ticket{
+                   extensions = #{early_data := Extensions0}} = NST0} = Ticket,
+    Extensions = #{early_data => #early_data_indication_nst{
+                                    indication = MaxEarlyDataSize}},
+    NST = NST0#new_session_ticket{extensions = Extensions},
+    [Ticket#{ticket => NST}].
 
