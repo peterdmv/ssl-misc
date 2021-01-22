@@ -473,15 +473,44 @@ server_early_data_loop_10k_enabled() ->
     {ok, LSock} = ssl:listen(Port, LOpts),
     accept_loop2(LSock).
 
+server_early_data_loop_5B() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    application:set_env(ssl, server_session_ticket_max_early_data, 5),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {reuseaddr, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {session_tickets, stateless},
+	     {early_data, disabled}
+	   %% ,{log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    accept_loop2(LSock).
+
+server_early_data_loop_5B_enabled() ->
+    application:load(ssl),
+    {ok, _} = application:ensure_all_started(ssl),
+    application:set_env(ssl, server_session_ticket_max_early_data, 5),
+    Port = ?PORT,
+    LOpts = [{certfile, ?SERVER_CERT},
+	     {keyfile, ?SERVER_KEY},
+	     {reuseaddr, true},
+	     {versions, ['tlsv1.2','tlsv1.3']},
+	     {session_tickets, stateless},
+	     {early_data, enabled}
+	   %% ,{log_level, debug}
+	    ],
+    {ok, LSock} = ssl:listen(Port, LOpts),
+    accept_loop2(LSock).
+
 accept_loop2(Sock) ->
     {ok, CSock} = ssl:transport_accept(Sock),
     {ok, _} = ssl:handshake(CSock),
     {ok, CSock2} = ssl:transport_accept(Sock),
     {ok, S} = ssl:handshake(CSock2),
     S.
-
-
-
 
 server_nv() ->
     application:load(ssl),
